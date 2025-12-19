@@ -3,6 +3,7 @@ Package for interacting on the network via a Async Protocol
 """
 
 import asyncio
+import inspect
 import logging
 import os
 from base64 import b64encode
@@ -80,8 +81,8 @@ class RPCProtocol(asyncio.DatagramProtocol):
         funcname, args = data
         func = getattr(self, f"{_RPC_METHOD_PREFIX}{funcname}", None)
         if func is None or not callable(func):
-            msgargs = (_RPC_METHOD_PREFIX, self.__class__.__name__, funcname)
-            LOG.warning("%s has no callable method rpc_%s; ignoring request", *msgargs)
+            msgargs = (self.__class__.__name__, _RPC_METHOD_PREFIX, funcname)
+            LOG.warning("%s has no callable method %s%s; ignoring request", *msgargs)
             return
 
         if not asyncio.iscoroutinefunction(func):
@@ -113,9 +114,21 @@ class RPCProtocol(asyncio.DatagramProtocol):
             return fn(*args, **kwargs)
 
         funcname = fn.__name__
-        if fn is None or not callable(fn):
-            msgargs = (self.__class__.__name__, funcname)
-            LOG.warning("%s has no callable method rpc_%s; ignoring request", *msgargs)
+        if inspect.isclass(fn):
+            LOG.warning(
+                "RPC registration skipped: classes cannot be registered as RPC methods (%s).",
+                funcname,
+            )
+            return
+        if not callable(fn):
+            LOG.warning(
+                "RPC registration skipped: decorator applied to a non-callable object."
+            )
+            return
+        if funcname == "<lambda>":
+            LOG.warning(
+                "RPC registration skipped: lambda functions cannot be used as RPC methods."
+            )
             return
         if not funcname.startswith(_RPC_METHOD_PREFIX):
             funcname = f"{_RPC_METHOD_PREFIX}{funcname}"
