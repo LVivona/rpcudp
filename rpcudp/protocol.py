@@ -6,6 +6,7 @@ import asyncio
 import logging
 import os
 from base64 import b64encode
+from functools import wraps
 from hashlib import sha1
 
 import umsgpack
@@ -14,8 +15,13 @@ from rpcudp.exceptions import MalformedMessage
 
 LOG = logging.getLogger(__name__)
 
+__all__ = ["RPCProtocol"]
+
+_RPC_METHOD_PREFIX = "rpc_"
+
 
 class RPCProtocol(asyncio.DatagramProtocol):
+
     """
     Protocol implementation using msgpack to encode messages and asyncio
     to handle async sending / recieving.
@@ -33,6 +39,7 @@ class RPCProtocol(asyncio.DatagramProtocol):
         self.transport = None
 
     def connection_made(self, transport):
+        """callback function that is made on asyncio end."""
         self.transport = transport
 
     def datagram_received(self, data, addr):
@@ -71,9 +78,9 @@ class RPCProtocol(asyncio.DatagramProtocol):
         if not isinstance(data, list) or len(data) != 2:
             raise MalformedMessage(f"Could not read packet: {data}")
         funcname, args = data
-        func = getattr(self, f"rpc_{funcname}", None)
+        func = getattr(self, f"{_RPC_METHOD_PREFIX}{funcname}", None)
         if func is None or not callable(func):
-            msgargs = (self.__class__.__name__, funcname)
+            msgargs = (_RPC_METHOD_PREFIX, self.__class__.__name__, funcname)
             LOG.warning("%s has no callable method rpc_%s; ignoring request", *msgargs)
             return
 
@@ -95,6 +102,26 @@ class RPCProtocol(asyncio.DatagramProtocol):
         LOG.error("Did not receive reply for msg id %s within %i seconds", *args)
         self._outstanding[msg_id][0].set_result((False, None))
         del self._outstanding[msg_id]
+
+    def method(self, fn):
+        """
+        Decorator for registering RPC handler methods.
+        """
+
+        @wraps(fn)
+        def wrapper(*args, **kwargs):
+            return fn(*args, **kwargs)
+
+        funcname = fn.__name__
+        if fn is None or not callable(fn):
+            msgargs = (self.__class__.__name__, funcname)
+            LOG.warning("%s has no callable method rpc_%s; ignoring request", *msgargs)
+            return
+        if not funcname.startswith(_RPC_METHOD_PREFIX):
+            funcname = f"{_RPC_METHOD_PREFIX}{funcname}"
+
+        setattr(self, funcname, fn)
+        return wrapper
 
     def __getattr__(self, name):
         """
