@@ -15,14 +15,12 @@ import umsgpack
 from rpcudp.exceptions import MalformedMessage
 
 LOG = logging.getLogger(__name__)
+_RPC_METHOD_PREFIX = "rpc_"
 
 __all__ = ["RPCProtocol"]
 
-_RPC_METHOD_PREFIX = "rpc_"
-
 
 class RPCProtocol(asyncio.DatagramProtocol):
-
     """
     Protocol implementation using msgpack to encode messages and asyncio
     to handle async sending / recieving.
@@ -41,7 +39,7 @@ class RPCProtocol(asyncio.DatagramProtocol):
 
     def connection_made(self, transport):
         """
-        Callback function made by asyncio once a connection has been initiated
+        Callback function made by asyncio once a connection has been initiated.
         """
         self.transport = transport
 
@@ -108,7 +106,7 @@ class RPCProtocol(asyncio.DatagramProtocol):
 
     def method(self, fn):
         """
-        Decorator for registering RPC handler methods.
+        Decorator for registering local methods as remotely callable RPC handlers.
         """
 
         @wraps(fn)
@@ -116,22 +114,17 @@ class RPCProtocol(asyncio.DatagramProtocol):
             return fn(*args, **kwargs)
 
         funcname = fn.__name__
-        if inspect.isclass(fn):
-            LOG.warning(
-                "RPC registration skipped: classes cannot be registered as RPC methods (%s).",
-                funcname,
+        if inspect.isclass(fn) or not callable(fn) or funcname == "<lambda>":
+            reason = (
+                "classes are not allowed"
+                if inspect.isclass(fn)
+                else "object is not callable"
+                if not callable(fn)
+                else "lambda functions are not allowed"
             )
-            return
-        if not callable(fn):
-            LOG.warning(
-                "RPC registration skipped: decorator applied to a non-callable object."
-            )
-            return
-        if funcname == "<lambda>":
-            LOG.warning(
-                "RPC registration skipped: lambda functions cannot be used as RPC methods."
-            )
-            return
+
+            raise TypeError(f"Invalid RPC handler '{funcname}', {reason}.")
+
         if not funcname.startswith(_RPC_METHOD_PREFIX):
             funcname = f"{_RPC_METHOD_PREFIX}{funcname}"
 
