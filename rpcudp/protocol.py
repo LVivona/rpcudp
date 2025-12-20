@@ -40,7 +40,9 @@ class RPCProtocol(asyncio.DatagramProtocol):
         self.transport = None
 
     def connection_made(self, transport):
-        """callback function that is made on asyncio end."""
+        """
+        Callback function made by asyncio once a connection has been initiated
+        """
         self.transport = transport
 
     def datagram_received(self, data, addr):
