@@ -54,12 +54,12 @@ rpc = RPCProtocol()
 
 @rpc.method
 def rpc_sayhi(sender, name):
-        return "Hello %s you live at %s:%i" % (name, sender[0], sender[1])
+    return "Hello %s you live at %s:%i" % (name, sender[0], sender[1])
 
 @rpc.method
 async def rpc_sayhi_slowly(sender, name):
-        await some_awaitable()
-        return "Hello %s you live at %s:%i" % (name, sender[0], sender[1])
+    await some_awaitable()
+    return "Hello %s you live at %s:%i" % (name, sender[0], sender[1])
 
 async def main():
     loop = asyncio.get_event_loop()
